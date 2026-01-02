@@ -65,6 +65,52 @@ public class ColorThief {
     }
 
     /**
+     * Use the median cut algorithm to cluster similar colors from the image border and return the base color from the largest cluster
+     *
+     * @param sourceImage source {@link Image}
+     * @param borderSize size of the border in pixels to be analyzed
+     *
+     * @return dominant border color as {@link Color}
+     */
+    public static Color getDominantBorderColor(Image sourceImage, int borderSize) {
+        return getDominantBorderColor(sourceImage, borderSize, DEFAULT_QUALITY, DEFAULT_IGNORE_WHITE);
+    }
+
+    /**
+     * Use the median cut algorithm to cluster similar colors from the image border and return the base color from the largest cluster
+     *
+     * @param sourceImage source {@link Image}
+     * @param borderSize size of the border in pixels to be analyzed
+     * @param quality
+     *            1 is the highest quality settings. 10 is the default. There is a trade-off between
+     *            quality and speed. The bigger the number, the faster a color will be returned but
+     *            the greater the likelihood that it will not be the visually most dominant color.
+     * @param ignoreWhite
+     *            if <code>true</code>, white pixels are ignored
+     *
+     * @return dominant border color as {@link Color}
+     * @throws IllegalArgumentException if quality is < 1
+     */
+    public static Color getDominantBorderColor(Image sourceImage, int borderSize, int quality, boolean ignoreWhite) {
+        int[][] borderPixels = getBorderPixels(sourceImage, borderSize, quality, ignoreWhite);
+
+        if (borderPixels == null || borderPixels.length == 0) {
+            return null;
+        }
+
+        ColorMap cmap = MMCQ.quantize(borderPixels, 5);
+
+        return Optional.ofNullable(cmap)
+                .map(ColorMap::palette)
+                .filter(palette -> palette.length > 0)
+                .map(palette -> {
+                    int[] dom = palette[0];
+                    return Color.rgb(dom[0], dom[1], dom[2]);
+                })
+                .orElse(null);
+    }
+
+    /**
      * Use the median cut algorithm to cluster similar colors
      *
      * @param sourceImage source {@link Image}
@@ -178,6 +224,60 @@ public class ColorThief {
             if (!(ignoreWhite && r > 250 && g > 250 && b > 250)) {
                 res[numUsedPixels] = new int[] {r, g, b};
                 numUsedPixels++;
+            }
+        }
+
+        return Arrays.copyOfRange(res, 0, numUsedPixels);
+    }
+
+    /**
+     * Gets the image's pixels {@link Color} from the specified border area via {@link PixelReader#getColor(int, int)} and separates it into RGB array
+     *
+     * @param sourceImage source {@link Image}
+     * @param borderSize size of the border in pixels to be analyzed
+     * @param quality
+     *            1 is the highest quality settings. 10 is the default. There is a trade-off between
+     *            quality and speed. The bigger the number, the faster the palette generation but
+     *            the greater the likelihood that colors will be missed.
+     * @param ignoreWhite if <code>true</code>, white pixels are ignored
+     *
+     * @return an array of pixels (each as RGB int array)
+     */
+    private static int[][] getBorderPixels(Image sourceImage, int borderSize, int quality, boolean ignoreWhite) {
+        int width = (int) sourceImage.getWidth();
+        int height = (int) sourceImage.getHeight();
+
+        int pixelCount = width * height;
+        PixelReader pixelReader = sourceImage.getPixelReader();
+
+        int numRegardedPixels = (pixelCount + quality - 1) / quality;
+
+        int[][] res = new int[numRegardedPixels][];
+        int r, g, b;
+
+        int numUsedPixels = 0;
+
+        for (int i = 0; i < pixelCount; i += quality) {
+            int x = i % width;
+            int y = i / width;
+
+            boolean isBorder = x < borderSize || x >= width - borderSize || y < borderSize || y >= height - borderSize;
+
+            if (isBorder) {
+                Color pixelColor = pixelReader.getColor(x, y);
+
+                if (pixelColor.getOpacity() < 0.5) {
+                    continue;
+                }
+
+                r = (int) (255 * pixelColor.getRed());
+                g = (int) (255 * pixelColor.getGreen());
+                b = (int) (255 * pixelColor.getBlue());
+
+                if (!(ignoreWhite && r > 250 && g > 250 && b > 250)) {
+                    res[numUsedPixels] = new int[]{r, g, b};
+                    numUsedPixels++;
+                }
             }
         }
 
