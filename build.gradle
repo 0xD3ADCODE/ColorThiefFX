@@ -15,7 +15,7 @@ apply plugin: 'idea'
 apply plugin: 'org.openjfx.javafxplugin'
 
 group 'xyz.fx.colorthief'
-version '1.0'
+version '1.1'
 
 repositories {
     mavenCentral()
